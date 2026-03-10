@@ -1,0 +1,1269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orbit Launch</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&family=Manrope:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  --bg-primary: #060a12;
+  --bg-secondary: #0d1320;
+  --bg-card: #131b2e;
+  --bg-card-hover: #1a2440;
+  --accent-green: #00e701;
+  --accent-green-dim: #00e70133;
+  --accent-red: #ff3b5c;
+  --accent-red-dim: #ff3b5c33;
+  --accent-gold: #ffd700;
+  --accent-gold-dim: #ffd70033;
+  --accent-blue: #3b82f6;
+  --accent-purple: #a855f7;
+  --accent-cyan: #06b6d4;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --border-color: #1e293b;
+  --border-active: #334155;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Manrope', sans-serif;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* ═══════ LAYOUT ═══════ */
+.game-container {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  grid-template-rows: auto 1fr auto;
+  height: 100vh;
+  gap: 0;
+}
+
+/* ═══════ TOP BAR ═══════ */
+.top-bar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 20px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  z-index: 10;
+}
+
+.logo {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: 2px;
+  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.logo span {
+  font-weight: 400;
+  font-size: 13px;
+  background: linear-gradient(135deg, var(--text-secondary), var(--text-muted));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.top-right { display: flex; align-items: center; gap: 12px; }
+
+.balance-display {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--bg-card); padding: 6px 16px;
+  border-radius: 8px; border: 1px solid var(--border-color);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px; font-weight: 600;
+}
+
+.balance-display .currency { color: var(--accent-gold); font-size: 12px; }
+
+.sound-toggle {
+  background: var(--bg-card); border: 1px solid var(--border-color);
+  border-radius: 8px; padding: 4px 10px; font-size: 16px;
+  cursor: pointer; transition: all 0.2s; line-height: 1;
+}
+.sound-toggle:hover { border-color: var(--border-active); }
+.sound-toggle.muted { opacity: 0.4; }
+
+/* ═══════ CANVAS AREA ═══════ */
+.canvas-area {
+  position: relative;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 50%, #0a1628 0%, var(--bg-primary) 70%);
+}
+
+canvas#gameCanvas { width: 100%; height: 100%; display: block; }
+
+/* ═══════ LIVE FEED (overlay top-left) ═══════ */
+.live-feed {
+  position: absolute;
+  top: 10px; left: 10px; right: 10px;
+  display: flex; gap: 3px; z-index: 5;
+  overflow-x: auto; overflow-y: visible;
+  -ms-overflow-style: none; scrollbar-width: none;
+  align-items: center;
+}
+.live-feed::-webkit-scrollbar { display: none; }
+
+.feed-badge {
+  padding: 2px 7px; border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; font-weight: 600;
+  animation: badgeIn 0.25s ease-out; flex-shrink: 0;
+  transition: transform 0.15s; cursor: default;
+}
+
+.feed-badge.win { background: var(--accent-green-dim); color: var(--accent-green); border: 1px solid #00e70144; }
+.feed-badge.loss { background: var(--accent-red-dim); color: var(--accent-red); border: 1px solid #ff3b5c44; }
+.feed-badge.mega { background: var(--accent-gold-dim); color: var(--accent-gold); border: 1px solid #ffd70044; }
+.feed-badge.epic { background: #a855f733; color: var(--accent-purple); border: 1px solid #a855f744; }
+
+@keyframes badgeIn {
+  from { transform: scale(0); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* ═══════ WIN FLASH (center overlay) ═══════ */
+.win-flash {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 900; font-size: 42px;
+  color: var(--accent-gold);
+  text-shadow: 0 0 60px rgba(255,215,0,0.6), 0 0 120px rgba(255,215,0,0.3);
+  pointer-events: none; z-index: 20;
+  opacity: 0; transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.win-flash.visible { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+
+/* ═══════ SESSION STATS (bottom-left overlay) ═══════ */
+.session-overlay {
+  position: absolute; bottom: 10px; left: 10px;
+  display: flex; gap: 12px; z-index: 5;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: var(--text-muted);
+}
+.session-overlay .stat { display: flex; gap: 4px; }
+.session-overlay .stat-val { color: var(--text-secondary); font-weight: 600; }
+
+/* ═══════ SIDEBAR ═══════ */
+.sidebar {
+  grid-row: 2 / 4;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border-color);
+  display: flex; flex-direction: column;
+  padding: 10px; gap: 8px;
+  overflow-y: auto;
+}
+
+.sidebar-section {
+  background: var(--bg-card);
+  border-radius: 10px; padding: 12px;
+  border: 1px solid var(--border-color);
+}
+
+.sidebar-section h3 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 10px; font-weight: 600;
+  letter-spacing: 2px; color: var(--text-muted);
+  text-transform: uppercase; margin-bottom: 8px;
+}
+
+/* ═══════ VOLATILITY SELECTOR ═══════ */
+.vol-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 3px;
+}
+
+.vol-tab {
+  padding: 7px 2px; border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: transparent; color: var(--text-secondary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 600;
+  cursor: pointer; transition: all 0.2s; text-align: center;
+}
+.vol-tab:hover { background: var(--bg-card-hover); border-color: var(--border-active); }
+.vol-tab.active { background: var(--accent-cyan)22; border-color: var(--accent-cyan); color: var(--accent-cyan); }
+
+/* ═══════ BET INPUT ═══════ */
+.bet-input-row {
+  display: flex; align-items: center; gap: 4px;
+}
+
+.bet-input {
+  flex: 1;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px; padding: 8px 10px;
+  color: var(--text-primary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 15px; font-weight: 600;
+  outline: none; transition: border-color 0.2s;
+}
+.bet-input:focus { border-color: var(--accent-cyan); }
+
+.bet-btn {
+  padding: 10px 10px; border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary); color: var(--text-secondary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 600;
+  cursor: pointer; transition: all 0.15s;
+}
+.bet-btn:hover { background: var(--bg-card-hover); border-color: var(--border-active); color: var(--text-primary); }
+
+/* ═══════ LAUNCH BUTTON ═══════ */
+.launch-btn {
+  width: 100%; padding: 18px;
+  border-radius: 12px; border: none;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 16px; font-weight: 700;
+  letter-spacing: 3px; cursor: pointer;
+  transition: all 0.15s; text-transform: uppercase;
+  background: linear-gradient(135deg, #0891b2, #06b6d4);
+  color: #0a0e17;
+  box-shadow: 0 4px 24px #06b6d444;
+  position: relative; overflow: hidden;
+}
+.launch-btn:hover { box-shadow: 0 4px 36px #06b6d477; transform: translateY(-1px); }
+.launch-btn:active { transform: translateY(0); box-shadow: 0 2px 16px #06b6d444; }
+.launch-btn.disabled { background: var(--bg-card); color: var(--text-muted); cursor: not-allowed; box-shadow: none; }
+
+.launch-btn .sub-text {
+  display: block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 500;
+  margin-top: 3px; letter-spacing: 0; opacity: 0.8;
+}
+
+/* ═══════ PAYOUT TABLE ═══════ */
+.payout-table {
+  display: flex; flex-direction: column; gap: 2px;
+}
+
+.payout-row {
+  display: flex; justify-content: space-between;
+  align-items: center; padding: 3px 6px;
+  border-radius: 4px; font-size: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  transition: background 0.2s;
+}
+.payout-row:hover { background: var(--bg-card-hover); }
+
+.payout-row .zone-name { color: var(--text-muted); display: flex; align-items: center; gap: 4px; }
+.payout-row .zone-dot { width: 6px; height: 6px; border-radius: 50%; }
+.payout-row .zone-mult { font-weight: 700; }
+.payout-row .zone-chance { color: var(--text-muted); font-size: 9px; }
+
+/* ═══════ STATS ═══════ */
+.stat-row {
+  display: flex; justify-content: space-between;
+  align-items: center; padding: 4px 0;
+  border-bottom: 1px solid #1e293b44;
+}
+.stat-row:last-child { border-bottom: none; }
+.stat-label { font-size: 11px; color: var(--text-muted); }
+.stat-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* ═══════ BOTTOM BAR ═══════ */
+.bottom-bar {
+  grid-column: 1;
+  display: flex; align-items: center; gap: 16px;
+  padding: 6px 20px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  font-size: 11px; color: var(--text-muted);
+}
+.bottom-bar .tag {
+  padding: 2px 8px; border-radius: 4px;
+  background: var(--bg-card);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* ═══════ RULES MODAL ═══════ */
+.rules-modal {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.7); z-index: 100;
+  justify-content: center; align-items: center;
+  backdrop-filter: blur(4px);
+}
+.rules-modal.visible { display: flex; }
+
+.rules-content {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 16px; padding: 24px 28px;
+  max-width: 520px; max-height: 80vh;
+  overflow-y: auto; color: var(--text-secondary);
+  font-size: 13px; line-height: 1.6;
+}
+.rules-content h2 { font-family: 'Orbitron', sans-serif; font-size: 16px; color: var(--text-primary); margin-bottom: 12px; }
+.rules-content h3 { font-family: 'Orbitron', sans-serif; font-size: 12px; color: var(--accent-cyan); margin: 12px 0 4px; letter-spacing: 1px; }
+.rules-content .close-rules { float: right; background: none; border: none; color: var(--text-muted); font-size: 20px; cursor: pointer; line-height: 1; }
+.rules-content .close-rules:hover { color: var(--text-primary); }
+
+/* ═══════ RESPONSIVE ═══════ */
+@media (max-width: 900px) {
+  .game-container {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 50vh auto auto;
+  }
+  .sidebar {
+    grid-row: auto; border-left: none;
+    border-top: 1px solid var(--border-color);
+    padding: 8px; gap: 6px;
+  }
+  .launch-btn { padding: 14px; font-size: 14px; }
+  .live-feed { max-width: 70%; }
+}
+
+/* ═══════ HOTKEY HINT ═══════ */
+.hotkeys-hint {
+  position: absolute; bottom: 4px; right: 12px;
+  font-size: 9px; color: var(--text-muted);
+  opacity: 0.35; pointer-events: none;
+  font-family: 'JetBrains Mono', monospace; z-index: 5;
+}
+</style>
+</head>
+<body>
+
+<div class="game-container">
+  <div class="top-bar">
+    <div class="logo">ORBIT <span>LAUNCH</span></div>
+    <div class="top-right">
+      <button class="sound-toggle" id="soundToggle" onclick="toggleSound()" title="Toggle sound">🔊</button>
+      <div class="balance-display">
+        <span class="currency">$</span>
+        <span id="balanceValue">10,000.00</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="canvas-area" id="canvasArea">
+    <canvas id="gameCanvas"></canvas>
+    <div class="live-feed" id="liveFeed"></div>
+    <div class="win-flash" id="winFlash"></div>
+    <div class="session-overlay">
+      <div class="stat">Rockets: <span class="stat-val" id="oRockets">0</span></div>
+      <div class="stat">Wins: <span class="stat-val" id="oWins">0</span></div>
+      <div class="stat">P/L: <span class="stat-val" id="oPL">$0.00</span></div>
+    </div>
+    <div class="hotkeys-hint">SPACE=Launch · 1-5=Bet · S=Sound · R=Rules</div>
+  </div>
+
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <h3>Volatility</h3>
+      <div class="vol-tabs" id="volTabs">
+        <button class="vol-tab active" data-vol="low">Low</button>
+        <button class="vol-tab" data-vol="med">Med</button>
+        <button class="vol-tab" data-vol="high">High</button>
+        <button class="vol-tab" data-vol="extreme">Degen</button>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Bet Per Rocket</h3>
+      <div class="bet-input-row">
+        <input type="number" class="bet-input" id="betInput" value="1" min="0.10" step="0.10">
+      </div>
+      <div class="bet-input-row" style="margin-top:4px;">
+        <button class="bet-btn" onclick="setBet(0.1)">$0.1</button>
+        <button class="bet-btn" onclick="setBet(1)">$1</button>
+        <button class="bet-btn" onclick="setBet(5)">$5</button>
+        <button class="bet-btn" onclick="setBet(10)">$10</button>
+        <button class="bet-btn" onclick="halfBet()">½</button>
+        <button class="bet-btn" onclick="doubleBet()">2×</button>
+      </div>
+    </div>
+
+    <div class="sidebar-section" style="padding: 10px 14px;">
+      <button class="launch-btn" id="launchBtn" onclick="launchRocket()">
+        LAUNCH 🚀
+        <span class="sub-text" id="launchSub">$1.00 per rocket</span>
+      </button>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Payout Zones</h3>
+      <div class="payout-table" id="payoutTable"></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="stat-row">
+        <span class="stat-label">Total Bet</span>
+        <span class="stat-value" id="statTotalBet">$0</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Total Won</span>
+        <span class="stat-value" id="statTotalWon">$0</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Best Win</span>
+        <span class="stat-value" id="statBestWin">—</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Hit Rate</span>
+        <span class="stat-value" id="statHitRate">—</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="bottom-bar">
+    <span class="tag">RTP 96%</span>
+    <span class="tag">Instant Outcome</span>
+    <span style="margin-left: auto">Orbit Launch — HypeGames v0.1</span>
+    <button class="info-btn" onclick="toggleRules()" title="Game rules" style="background:none;border:none;font-size:14px;cursor:pointer;opacity:0.5;padding:0 4px;">ℹ️</button>
+  </div>
+</div>
+
+<div class="rules-modal" id="rulesModal" onclick="if(event.target===this)toggleRules()">
+  <div class="rules-content">
+    <button class="close-rules" onclick="toggleRules()">×</button>
+    <h2>🌌 Orbit Launch</h2>
+    <p>Launch rockets from Earth into orbit! Each rocket flies to a random distance. The further it goes, the bigger your win.</p>
+
+    <h3>HOW TO PLAY</h3>
+    <p>1. Choose volatility level (Low / Med / High / Degen)<br>
+    2. Set your bet per rocket<br>
+    3. Spam LAUNCH (click or Space) — each click = 1 rocket = 1 bet<br>
+    4. Watch rockets fly outward through orbit zones<br>
+    5. Each rocket auto-pays based on which zone it reaches</p>
+
+    <h3>ORBIT ZONES</h3>
+    <p>Rockets fly from Earth outward through concentric orbit zones. Each zone has a fixed multiplier. The further your rocket reaches, the higher the payout. Most rockets explode near Earth (0x loss). Rare rockets reach Deep Space for massive wins.</p>
+
+    <h3>VOLATILITY</h3>
+    <p>Low — More rockets survive, smaller max payouts<br>
+    Med — Balanced risk and reward<br>
+    High — Most rockets explode, survivors pay big<br>
+    Degen — Almost all explode, rare mega wins up to 2500×</p>
+
+    <h3>MATH</h3>
+    <p>RTP: 96.00% on all volatility levels<br>
+    Each rocket is an independent outcome<br>
+    Results are instant — no cashout decision needed</p>
+
+    <h3>KEYBOARD</h3>
+    <p>Space — Launch rocket<br>
+    1-5 — Quick bet ($0.1, $1, $5, $10, $50)<br>
+    S — Toggle sound · R — Rules</p>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+//  ORBIT LAUNCH — RAPID-FIRE ORBITAL GAME
+//  HypeGames v0.1 | RTP 96.00%
+// ═══════════════════════════════════════════
+
+// ──────── PAYOUT TABLES (96.0% RTP each) ────────
+// Built using EV-share method: for each zone, ev_share = probability × multiplier
+// Sum of ev_shares = 0.96, remainder probability goes to 0× (explode)
+const ZONE_DEFS = {
+  low: {
+    label: 'Low',
+    zones: [
+      { mult: 0,    name: 'Explode',     emoji: '💥', color: '#ff3b5c', ring: 0 },
+      { mult: 0.5,  name: 'Atmosphere',  emoji: '🌍', color: '#64748b', ring: 1, ev: 0.12 },
+      { mult: 1.0,  name: 'Low Orbit',   emoji: '🛸', color: '#94a3b8', ring: 2, ev: 0.17 },
+      { mult: 1.5,  name: 'Moon',        emoji: '🌙', color: '#e2e8f0', ring: 3, ev: 0.12 },
+      { mult: 2.5,  name: 'Mars',        emoji: '🔴', color: '#f97316', ring: 4, ev: 0.11 },
+      { mult: 5,    name: 'Jupiter',     emoji: '🟤', color: '#fbbf24', ring: 5, ev: 0.11 },
+      { mult: 10,   name: 'Saturn',      emoji: '🪐', color: '#a855f7', ring: 6, ev: 0.11 },
+      { mult: 25,   name: 'Neptune',     emoji: '💎', color: '#3b82f6', ring: 7, ev: 0.10 },
+      { mult: 50,   name: 'Deep Space',  emoji: '🌌', color: '#06b6d4', ring: 8, ev: 0.12 },
+    ],
+  },
+  med: {
+    label: 'Medium',
+    zones: [
+      { mult: 0,    name: 'Explode',     emoji: '💥', color: '#ff3b5c', ring: 0 },
+      { mult: 0.3,  name: 'Atmosphere',  emoji: '🌍', color: '#64748b', ring: 1, ev: 0.08 },
+      { mult: 0.8,  name: 'Low Orbit',   emoji: '🛸', color: '#94a3b8', ring: 2, ev: 0.12 },
+      { mult: 1.5,  name: 'Moon',        emoji: '🌙', color: '#e2e8f0', ring: 3, ev: 0.12 },
+      { mult: 3,    name: 'Mars',        emoji: '🔴', color: '#f97316', ring: 4, ev: 0.11 },
+      { mult: 7,    name: 'Jupiter',     emoji: '🟤', color: '#fbbf24', ring: 5, ev: 0.11 },
+      { mult: 15,   name: 'Saturn',      emoji: '🪐', color: '#a855f7', ring: 6, ev: 0.10 },
+      { mult: 40,   name: 'Neptune',     emoji: '💎', color: '#3b82f6', ring: 7, ev: 0.12 },
+      { mult: 100,  name: 'Deep Space',  emoji: '🌌', color: '#06b6d4', ring: 8, ev: 0.09 },
+      { mult: 200,  name: 'Black Hole',  emoji: '🕳️', color: '#ffd700', ring: 9, ev: 0.11 },
+    ],
+  },
+  high: {
+    label: 'High',
+    zones: [
+      { mult: 0,    name: 'Explode',     emoji: '💥', color: '#ff3b5c', ring: 0 },
+      { mult: 0.2,  name: 'Atmosphere',  emoji: '🌍', color: '#64748b', ring: 1, ev: 0.05 },
+      { mult: 0.5,  name: 'Low Orbit',   emoji: '🛸', color: '#94a3b8', ring: 2, ev: 0.05 },
+      { mult: 1.5,  name: 'Moon',        emoji: '🌙', color: '#e2e8f0', ring: 3, ev: 0.08 },
+      { mult: 5,    name: 'Mars',        emoji: '🔴', color: '#f97316', ring: 4, ev: 0.09 },
+      { mult: 15,   name: 'Jupiter',     emoji: '🟤', color: '#fbbf24', ring: 5, ev: 0.11 },
+      { mult: 50,   name: 'Saturn',      emoji: '🪐', color: '#a855f7', ring: 6, ev: 0.13 },
+      { mult: 150,  name: 'Neptune',     emoji: '💎', color: '#3b82f6', ring: 7, ev: 0.16 },
+      { mult: 500,  name: 'Deep Space',  emoji: '🌌', color: '#06b6d4', ring: 8, ev: 0.18 },
+      { mult: 1000, name: 'Black Hole',  emoji: '🕳️', color: '#ffd700', ring: 9, ev: 0.11 },
+    ],
+  },
+  extreme: {
+    label: 'Degen',
+    zones: [
+      { mult: 0,    name: 'Explode',     emoji: '💥', color: '#ff3b5c', ring: 0 },
+      { mult: 0.1,  name: 'Atmosphere',  emoji: '🌍', color: '#64748b', ring: 1, ev: 0.02 },
+      { mult: 0.5,  name: 'Low Orbit',   emoji: '🛸', color: '#94a3b8', ring: 2, ev: 0.02 },
+      { mult: 2,    name: 'Moon',        emoji: '🌙', color: '#e2e8f0', ring: 3, ev: 0.04 },
+      { mult: 10,   name: 'Mars',        emoji: '🔴', color: '#f97316', ring: 4, ev: 0.06 },
+      { mult: 50,   name: 'Jupiter',     emoji: '🟤', color: '#fbbf24', ring: 5, ev: 0.10 },
+      { mult: 200,  name: 'Saturn',      emoji: '🪐', color: '#a855f7', ring: 6, ev: 0.14 },
+      { mult: 500,  name: 'Neptune',     emoji: '💎', color: '#3b82f6', ring: 7, ev: 0.18 },
+      { mult: 1500, name: 'Deep Space',  emoji: '🌌', color: '#06b6d4', ring: 8, ev: 0.20 },
+      { mult: 2500, name: 'Black Hole',  emoji: '🕳️', color: '#ffd700', ring: 9, ev: 0.20 },
+    ],
+  },
+};
+
+// ──────── MATH ENGINE ────────
+class MathEngine {
+  static buildTable(volKey) {
+    const def = ZONE_DEFS[volKey];
+    const table = [];
+    let usedProb = 0;
+
+    for (const z of def.zones) {
+      if (z.mult === 0) continue; // explode zone added at end
+      const prob = z.ev / z.mult;
+      table.push({ ...z, prob });
+      usedProb += prob;
+    }
+
+    // Explode zone gets remaining probability
+    const explodeZone = def.zones.find(z => z.mult === 0);
+    table.unshift({ ...explodeZone, prob: 1 - usedProb });
+
+    return table;
+  }
+
+  static computeRTP(table) {
+    return table.reduce((s, z) => s + z.prob * z.mult, 0);
+  }
+
+  static selectOutcome(table) {
+    const r = Math.random();
+    let cumulative = 0;
+    for (const z of table) {
+      cumulative += z.prob;
+      if (r <= cumulative) return z;
+    }
+    return table[0]; // fallback: explode
+  }
+
+  // Verification: run N rounds, print actual RTP
+  static verify(volKey, n = 1000000) {
+    const table = this.buildTable(volKey);
+    let totalPayout = 0;
+    for (let i = 0; i < n; i++) {
+      const outcome = this.selectOutcome(table);
+      totalPayout += outcome.mult;
+    }
+    const actualRTP = totalPayout / n;
+    console.log(`[RTP Verify] ${volKey}: ${(actualRTP * 100).toFixed(4)}% (target: 96.00%, n=${n.toLocaleString()})`);
+    console.log(`  Theoretical: ${(this.computeRTP(table) * 100).toFixed(4)}%`);
+    return actualRTP;
+  }
+}
+
+// ──────── SOUND ENGINE (reused from Rocket Ride) ────────
+class SoundEngine {
+  constructor() { this.ctx = null; this.enabled = true; }
+
+  init() {
+    if (this.ctx) return;
+    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+
+  play(name) {
+    if (!this.enabled || !this.ctx) return;
+    try {
+      switch (name) {
+        case 'launch': this._tone(600, 0.06, 'sine', 0.12); break;
+        case 'explode': this._noise(0.15, 0.08); break;
+        case 'win_low': this._tone(523, 0.12, 'sine', 0.10); break;
+        case 'win_med': this._chord([523, 659], 0.15, 0.10); break;
+        case 'win_high': this._chord([523, 659, 784], 0.25, 0.12); break;
+        case 'win_mega': this._chord([523, 659, 784, 1047], 0.5, 0.15); break;
+        case 'win_epic':
+          this._chord([784, 988, 1175], 0.6, 0.15);
+          setTimeout(() => this._chord([1047, 1319, 1568], 0.4, 0.10), 200);
+          break;
+      }
+    } catch(e) {}
+  }
+
+  _tone(freq, dur, type, vol) {
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = type; osc.frequency.value = freq;
+    gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + dur);
+    osc.connect(gain).connect(this.ctx.destination);
+    osc.start(); osc.stop(this.ctx.currentTime + dur);
+  }
+
+  _chord(freqs, dur, vol) { freqs.forEach(f => this._tone(f, dur, 'sine', vol / freqs.length)); }
+
+  _noise(dur, vol) {
+    const buf = this.ctx.createBuffer(1, this.ctx.sampleRate * dur, this.ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    const src = this.ctx.createBufferSource();
+    const gain = this.ctx.createGain();
+    src.buffer = buf;
+    gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + dur);
+    src.connect(gain).connect(this.ctx.destination);
+    src.start();
+  }
+
+  _sweep(f1, f2, dur, type, vol) {
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(f1, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(f2, this.ctx.currentTime + dur);
+    gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + dur);
+    osc.connect(gain).connect(this.ctx.destination);
+    osc.start(); osc.stop(this.ctx.currentTime + dur);
+  }
+}
+
+// ──────── ORBIT RENDERER ────────
+class OrbitRenderer {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.rockets = []; // active rockets on screen
+    this.particles = [];
+    this.stars = [];
+    this.w = 0; this.h = 0;
+    this.cx = 0; this.cy = 0; // center (planet position)
+    this.maxRadius = 0;
+    this.resize();
+    this._initStars();
+    window.addEventListener('resize', () => this.resize());
+  }
+
+  resize() {
+    const area = document.getElementById('canvasArea');
+    const dpr = window.devicePixelRatio || 1;
+    this.canvas.width = area.clientWidth * dpr;
+    this.canvas.height = area.clientHeight * dpr;
+    this.ctx.scale(dpr, dpr);
+    this.w = area.clientWidth;
+    this.h = area.clientHeight;
+    this.cx = this.w / 2;
+    this.cy = this.h / 2;
+    this.maxRadius = Math.min(this.w, this.h) * 0.45;
+  }
+
+  _initStars() {
+    this.stars = [];
+    for (let i = 0; i < 200; i++) {
+      this.stars.push({
+        x: Math.random() * 2000, y: Math.random() * 2000,
+        r: Math.random() * 1.2 + 0.2,
+        a: Math.random() * 0.5 + 0.1,
+        twinkle: Math.random() * Math.PI * 2,
+      });
+    }
+  }
+
+  getZoneRadius(ring, totalZones) {
+    if (ring === 0) return 0;
+    const planetR = 28;
+    const minR = planetR + 15;
+    const available = this.maxRadius - minR;
+    return minR + (ring / totalZones) * available;
+  }
+
+  render(currentTable) {
+    const ctx = this.ctx;
+    const t = Date.now() / 1000;
+    ctx.clearRect(0, 0, this.w, this.h);
+
+    // Background
+    const bgGrad = ctx.createRadialGradient(this.cx, this.cy, 0, this.cx, this.cy, this.maxRadius * 1.5);
+    bgGrad.addColorStop(0, '#0d1a30');
+    bgGrad.addColorStop(0.4, '#080e1a');
+    bgGrad.addColorStop(1, '#040610');
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, this.w, this.h);
+
+    // Stars with twinkle
+    this.stars.forEach(s => {
+      const twinkle = 0.5 + 0.5 * Math.sin(t * 1.5 + s.twinkle);
+      ctx.beginPath();
+      ctx.arc(s.x % this.w, s.y % this.h, s.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,255,255,${s.a * twinkle})`;
+      ctx.fill();
+    });
+
+    // Orbit rings
+    const totalZones = currentTable.filter(z => z.ring > 0).length;
+    currentTable.forEach(z => {
+      if (z.ring <= 0) return;
+      const r = this.getZoneRadius(z.ring, totalZones);
+      if (r <= 0) return;
+
+      // Ring line
+      ctx.beginPath();
+      ctx.arc(this.cx, this.cy, r, 0, Math.PI * 2);
+      ctx.strokeStyle = z.color + '30';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 8]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Zone label (right side)
+      const labelAngle = -0.1 + z.ring * 0.02;
+      const lx = this.cx + Math.cos(labelAngle) * (r + 2);
+      const ly = this.cy + Math.sin(labelAngle) * (r + 2);
+      ctx.font = '9px JetBrains Mono';
+      ctx.fillStyle = z.color + '88';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`${z.mult}× ${z.name}`, lx + 4, ly);
+
+      // Small dot marker
+      ctx.beginPath();
+      ctx.arc(lx, ly, 2, 0, Math.PI * 2);
+      ctx.fillStyle = z.color + '66';
+      ctx.fill();
+    });
+
+    // Planet (Earth)
+    const planetR = 28;
+    // Planet glow
+    const planetGlow = ctx.createRadialGradient(this.cx, this.cy, planetR, this.cx, this.cy, planetR * 3);
+    planetGlow.addColorStop(0, 'rgba(59,130,246,0.15)');
+    planetGlow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = planetGlow;
+    ctx.fillRect(this.cx - planetR * 3, this.cy - planetR * 3, planetR * 6, planetR * 6);
+
+    // Planet body
+    const pGrad = ctx.createRadialGradient(this.cx - 8, this.cy - 8, 0, this.cx, this.cy, planetR);
+    pGrad.addColorStop(0, '#4ade80');
+    pGrad.addColorStop(0.4, '#22c55e');
+    pGrad.addColorStop(0.7, '#166534');
+    pGrad.addColorStop(1, '#052e16');
+    ctx.beginPath();
+    ctx.arc(this.cx, this.cy, planetR, 0, Math.PI * 2);
+    ctx.fillStyle = pGrad;
+    ctx.fill();
+
+    // Ocean patches
+    ctx.fillStyle = 'rgba(59,130,246,0.35)';
+    ctx.beginPath();
+    ctx.ellipse(this.cx + 5, this.cy - 5, 12, 8, 0.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(this.cx - 8, this.cy + 8, 8, 6, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Atmosphere rim
+    ctx.beginPath();
+    ctx.arc(this.cx, this.cy, planetR + 2, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(96,165,250,0.25)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // Render rockets
+    this._renderRockets(ctx, t, currentTable, totalZones);
+
+    // Render particles
+    this._renderParticles(ctx);
+
+    // HypeGames watermark
+    ctx.save();
+    ctx.globalAlpha = 0.10;
+    ctx.font = 'bold 10px Orbitron';
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('HypeGames', this.w - 10, this.h - 6);
+    ctx.restore();
+  }
+
+  _renderRockets(ctx, t, currentTable, totalZones) {
+    for (let i = this.rockets.length - 1; i >= 0; i--) {
+      const rk = this.rockets[i];
+      const elapsed = (Date.now() - rk.startTime) / 1000;
+      const flightDuration = rk.flightDuration;
+
+      if (elapsed > flightDuration + 1.5) {
+        // Rocket expired — remove
+        this.rockets.splice(i, 1);
+        continue;
+      }
+
+      const targetRadius = rk.zone.ring > 0
+        ? this.getZoneRadius(rk.zone.ring, totalZones)
+        : 20; // explode near planet
+
+      const progress = Math.min(elapsed / flightDuration, 1);
+      // Eased progress (ease-out for deceleration feel)
+      const eased = 1 - Math.pow(1 - progress, 2.5);
+      const currentR = eased * targetRadius;
+
+      const x = this.cx + Math.cos(rk.angle) * currentR;
+      const y = this.cy + Math.sin(rk.angle) * currentR;
+
+      if (progress < 1) {
+        // Flying — draw rocket
+        const size = 5 + (rk.zone.ring / totalZones) * 3;
+
+        // Trail
+        if (elapsed > 0.05) {
+          const trailLen = Math.min(currentR * 0.3, 30);
+          const tx = this.cx + Math.cos(rk.angle) * (currentR - trailLen);
+          const ty = this.cy + Math.sin(rk.angle) * (currentR - trailLen);
+          const trailGrad = ctx.createLinearGradient(tx, ty, x, y);
+          trailGrad.addColorStop(0, 'rgba(255,255,255,0)');
+          trailGrad.addColorStop(1, rk.zone.mult > 0 ? 'rgba(6,182,212,0.5)' : 'rgba(255,59,92,0.3)');
+          ctx.beginPath();
+          ctx.moveTo(tx, ty);
+          ctx.lineTo(x, y);
+          ctx.strokeStyle = trailGrad;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+
+        // Rocket dot
+        ctx.beginPath();
+        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+
+        // Engine glow
+        ctx.beginPath();
+        ctx.arc(x, y, size + 3, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(6,182,212,0.2)';
+        ctx.fill();
+
+        // Add exhaust particle
+        if (Math.random() < 0.3 && this.particles.length < 500) {
+          this.particles.push({
+            x: x + (Math.random() - 0.5) * 3,
+            y: y + (Math.random() - 0.5) * 3,
+            vx: -Math.cos(rk.angle) * (1 + Math.random()),
+            vy: -Math.sin(rk.angle) * (1 + Math.random()),
+            r: Math.random() * 2 + 0.5,
+            life: 1, decay: 0.04 + Math.random() * 0.03,
+            color: 'rgba(6,182,212,1)',
+          });
+        }
+      } else if (!rk.resolved) {
+        // Just reached target — resolve
+        rk.resolved = true;
+        rk.resolveTime = Date.now();
+
+        if (rk.zone.mult === 0) {
+          // Explode!
+          this._addExplosion(x, y, 'rgba(255,59,92,1)', 12);
+          this._addExplosion(x, y, 'rgba(255,165,0,1)', 8);
+        } else {
+          // Win — colored explosion
+          this._addExplosion(x, y, rk.zone.color.replace('#', 'rgba(') ? rk.zone.color : '#00e701', 15);
+          // Show floating multiplier
+          rk.showMult = true;
+          rk.multX = x;
+          rk.multY = y;
+        }
+      } else {
+        // Post-resolution — show result briefly
+        const since = (Date.now() - rk.resolveTime) / 1000;
+        const fadeAlpha = Math.max(0, 1 - since / 1.2);
+
+        if (rk.showMult && rk.zone.mult > 0) {
+          ctx.save();
+          ctx.globalAlpha = fadeAlpha;
+          ctx.font = `bold ${rk.zone.mult >= 10 ? 14 : 11}px JetBrains Mono`;
+          ctx.fillStyle = rk.zone.color;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(`${rk.zone.mult}×`, rk.multX, rk.multY - 12 - since * 20);
+          ctx.restore();
+        }
+
+        // Fading ring at zone
+        if (rk.zone.mult > 0) {
+          ctx.save();
+          ctx.globalAlpha = fadeAlpha * 0.5;
+          ctx.beginPath();
+          ctx.arc(x, y, 8, 0, Math.PI * 2);
+          ctx.strokeStyle = rk.zone.color;
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+    }
+  }
+
+  _renderParticles(ctx) {
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life -= p.decay;
+      if (p.life <= 0) { this.particles.splice(i, 1); continue; }
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * p.life, 0, Math.PI * 2);
+      ctx.fillStyle = p.color.replace('1)', `${p.life})`);
+      ctx.fill();
+    }
+  }
+
+  _addExplosion(x, y, color, count) {
+    const room = Math.max(0, 500 - this.particles.length);
+    const actual = Math.min(count, room);
+    for (let i = 0; i < actual; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = Math.random() * 4 + 1;
+      this.particles.push({
+        x, y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        r: Math.random() * 3 + 1,
+        life: 1, decay: 0.02 + Math.random() * 0.02,
+        color,
+      });
+    }
+  }
+
+  addRocket(zone, table) {
+    const angle = Math.random() * Math.PI * 2;
+    const totalZones = table.filter(z => z.ring > 0).length;
+    // Flight duration: further zones take longer
+    const baseDur = 0.4;
+    const maxDur = 1.8;
+    const durFraction = zone.ring / Math.max(totalZones, 1);
+    const flightDuration = baseDur + durFraction * (maxDur - baseDur);
+
+    this.rockets.push({
+      angle,
+      zone,
+      startTime: Date.now(),
+      flightDuration: zone.mult === 0 ? 0.3 + Math.random() * 0.3 : flightDuration,
+      resolved: false,
+      resolveTime: 0,
+      showMult: false,
+      multX: 0, multY: 0,
+    });
+  }
+}
+
+// ──────── GAME STATE ────────
+const State = {
+  balance: 10000,
+  betAmount: 1,
+  volatility: 'low',
+  currentTable: null,
+
+  // Stats
+  totalBet: 0,
+  totalWon: 0,
+  bestWin: 0,
+  rocketsLaunched: 0,
+  rocketsWon: 0,
+  sessionPL: 0,
+};
+
+// ──────── DOM REFS ────────
+const DOM = {
+  balance: document.getElementById('balanceValue'),
+  betInput: document.getElementById('betInput'),
+  launchBtn: document.getElementById('launchBtn'),
+  launchSub: document.getElementById('launchSub'),
+  liveFeed: document.getElementById('liveFeed'),
+  winFlash: document.getElementById('winFlash'),
+  payoutTable: document.getElementById('payoutTable'),
+  statTotalBet: document.getElementById('statTotalBet'),
+  statTotalWon: document.getElementById('statTotalWon'),
+  statBestWin: document.getElementById('statBestWin'),
+  statHitRate: document.getElementById('statHitRate'),
+  oRockets: document.getElementById('oRockets'),
+  oWins: document.getElementById('oWins'),
+  oPL: document.getElementById('oPL'),
+  soundToggle: document.getElementById('soundToggle'),
+};
+
+// ──────── INSTANCES ────────
+const renderer = new OrbitRenderer(document.getElementById('gameCanvas'));
+const sound = new SoundEngine();
+
+// ──────── UI ────────
+function updateBalance() {
+  DOM.balance.textContent = State.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function updateLaunchButton() {
+  DOM.launchSub.textContent = `$${State.betAmount.toFixed(2)} per rocket`;
+  if (State.betAmount > State.balance) {
+    DOM.launchBtn.classList.add('disabled');
+  } else {
+    DOM.launchBtn.classList.remove('disabled');
+  }
+}
+
+function updateStats() {
+  DOM.statTotalBet.textContent = '$' + State.totalBet.toFixed(2);
+  DOM.statTotalWon.textContent = '$' + State.totalWon.toFixed(2);
+  DOM.statBestWin.textContent = State.bestWin > 0 ? `$${State.bestWin.toFixed(2)}` : '—';
+  DOM.statHitRate.textContent = State.rocketsLaunched > 0
+    ? `${((State.rocketsWon / State.rocketsLaunched) * 100).toFixed(1)}%`
+    : '—';
+  DOM.oRockets.textContent = State.rocketsLaunched;
+  DOM.oWins.textContent = State.rocketsWon;
+  const pl = State.sessionPL;
+  DOM.oPL.textContent = (pl >= 0 ? '+$' : '-$') + Math.abs(pl).toFixed(2);
+  DOM.oPL.style.color = pl >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+}
+
+function buildPayoutTableUI() {
+  const table = State.currentTable;
+  DOM.payoutTable.innerHTML = '';
+
+  table.forEach(z => {
+    if (z.mult === 0) return; // skip explode in UI table
+    const row = document.createElement('div');
+    row.className = 'payout-row';
+    const pct = (z.prob * 100);
+    const pctStr = pct >= 1 ? pct.toFixed(1) + '%' : pct >= 0.1 ? pct.toFixed(2) + '%' : pct.toFixed(3) + '%';
+    row.innerHTML = `
+      <span class="zone-name"><span class="zone-dot" style="background:${z.color}"></span>${z.emoji} ${z.name}</span>
+      <span class="zone-mult" style="color:${z.color}">${z.mult}×</span>
+      <span class="zone-chance">${pctStr}</span>
+    `;
+    DOM.payoutTable.appendChild(row);
+  });
+
+  // Add explode row at bottom
+  const explode = table.find(z => z.mult === 0);
+  if (explode) {
+    const row = document.createElement('div');
+    row.className = 'payout-row';
+    row.innerHTML = `
+      <span class="zone-name"><span class="zone-dot" style="background:${explode.color}"></span>${explode.emoji} ${explode.name}</span>
+      <span class="zone-mult" style="color:${explode.color}">0×</span>
+      <span class="zone-chance">${(explode.prob * 100).toFixed(1)}%</span>
+    `;
+    DOM.payoutTable.appendChild(row);
+  }
+}
+
+function addFeedBadge(zone, winAmount, betAmount) {
+  const badge = document.createElement('div');
+  badge.className = 'feed-badge';
+
+  if (zone.mult === 0) {
+    badge.classList.add('loss');
+    badge.textContent = '0×';
+  } else if (zone.mult >= 50) {
+    badge.classList.add('epic');
+    badge.textContent = zone.mult + '×';
+  } else if (zone.mult >= 5) {
+    badge.classList.add('mega');
+    badge.textContent = zone.mult + '×';
+  } else {
+    badge.classList.add('win');
+    badge.textContent = zone.mult + '×';
+  }
+
+  badge.title = `${zone.name} · $${betAmount.toFixed(2)} → $${winAmount.toFixed(2)}`;
+  DOM.liveFeed.insertBefore(badge, DOM.liveFeed.firstChild);
+
+  // Keep max 30 badges
+  while (DOM.liveFeed.children.length > 30) {
+    DOM.liveFeed.removeChild(DOM.liveFeed.lastChild);
+  }
+}
+
+function showWinFlash(amount, mult) {
+  const el = DOM.winFlash;
+  el.textContent = `+$${amount.toFixed(2)} (${mult}×)`;
+  el.classList.add('visible');
+  clearTimeout(el._timer);
+  el._timer = setTimeout(() => el.classList.remove('visible'), 1200);
+}
+
+// ──────── GAME LOGIC ────────
+function launchRocket() {
+  sound.init();
+
+  if (State.betAmount > State.balance) return;
+  if (State.betAmount <= 0) return;
+
+  // Debit
+  State.balance -= State.betAmount;
+  State.totalBet += State.betAmount;
+  State.rocketsLaunched++;
+
+  // Determine outcome
+  const outcome = MathEngine.selectOutcome(State.currentTable);
+  const winAmount = State.betAmount * outcome.mult;
+
+  // Credit win immediately (in real Stake Engine, RGS handles this)
+  State.balance += winAmount;
+  State.totalWon += winAmount;
+  State.sessionPL += winAmount - State.betAmount;
+
+  if (outcome.mult > 0) State.rocketsWon++;
+  if (winAmount > State.bestWin) State.bestWin = winAmount;
+
+  // Visual
+  renderer.addRocket(outcome, State.currentTable);
+
+  // Sound
+  if (outcome.mult === 0) {
+    sound.play('launch');
+  } else if (outcome.mult >= 100) {
+    sound.play('launch');
+    setTimeout(() => sound.play('win_epic'), 400);
+    showWinFlash(winAmount, outcome.mult);
+  } else if (outcome.mult >= 10) {
+    sound.play('launch');
+    setTimeout(() => sound.play('win_mega'), 300);
+    showWinFlash(winAmount, outcome.mult);
+  } else if (outcome.mult >= 3) {
+    sound.play('launch');
+    setTimeout(() => sound.play('win_high'), 200);
+  } else if (outcome.mult >= 1) {
+    sound.play('launch');
+    setTimeout(() => sound.play('win_med'), 200);
+  } else {
+    sound.play('launch');
+    setTimeout(() => sound.play('win_low'), 200);
+  }
+
+  // Feed badge (delayed to match flight time)
+  const feedDelay = outcome.mult === 0 ? 400 : 500 + outcome.ring * 150;
+  setTimeout(() => addFeedBadge(outcome, winAmount, State.betAmount), feedDelay);
+
+  // Update UI
+  updateBalance();
+  updateLaunchButton();
+  updateStats();
+}
+
+// ──────── BET CONTROLS ────────
+function setBet(amount) {
+  State.betAmount = Math.max(0.10, amount);
+  DOM.betInput.value = State.betAmount;
+  updateLaunchButton();
+}
+
+function halfBet() {
+  State.betAmount = Math.max(0.10, Math.round(State.betAmount * 50) / 100);
+  DOM.betInput.value = State.betAmount;
+  updateLaunchButton();
+}
+
+function doubleBet() {
+  State.betAmount = Math.round(State.betAmount * 200) / 100;
+  DOM.betInput.value = State.betAmount;
+  updateLaunchButton();
+}
+
+DOM.betInput.addEventListener('change', () => {
+  State.betAmount = Math.max(0.10, parseFloat(DOM.betInput.value) || 0.10);
+  DOM.betInput.value = State.betAmount;
+  updateLaunchButton();
+});
+
+// ──────── VOLATILITY TABS ────────
+document.querySelectorAll('.vol-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.vol-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    State.volatility = tab.dataset.vol;
+    State.currentTable = MathEngine.buildTable(State.volatility);
+    buildPayoutTableUI();
+  });
+});
+
+// ──────── SOUND TOGGLE ────────
+function toggleSound() {
+  sound.enabled = !sound.enabled;
+  DOM.soundToggle.textContent = sound.enabled ? '🔊' : '🔇';
+  DOM.soundToggle.classList.toggle('muted', !sound.enabled);
+}
+
+// ──────── RULES MODAL ────────
+function toggleRules() {
+  document.getElementById('rulesModal').classList.toggle('visible');
+}
+
+// ──────── KEYBOARD ────────
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT') return;
+  switch (e.code) {
+    case 'Space': e.preventDefault(); launchRocket(); break;
+    case 'Digit1': setBet(0.1); break;
+    case 'Digit2': setBet(1); break;
+    case 'Digit3': setBet(5); break;
+    case 'Digit4': setBet(10); break;
+    case 'Digit5': setBet(50); break;
+    case 'KeyS': toggleSound(); break;
+    case 'KeyR': toggleRules(); break;
+  }
+});
+
+// ──────── RENDER LOOP ────────
+function renderLoop() {
+  renderer.render(State.currentTable);
+  requestAnimationFrame(renderLoop);
+}
+
+// ──────── INIT ────────
+State.currentTable = MathEngine.buildTable(State.volatility);
+buildPayoutTableUI();
+updateBalance();
+updateLaunchButton();
+updateStats();
+renderLoop();
+
+// Verify RTP on load (check console)
+console.log('=== ORBIT LAUNCH — RTP VERIFICATION ===');
+['low', 'med', 'high', 'extreme'].forEach(v => {
+  const table = MathEngine.buildTable(v);
+  const theoretical = MathEngine.computeRTP(table);
+  console.log(`${v}: theoretical RTP = ${(theoretical * 100).toFixed(4)}%`);
+  table.forEach(z => {
+    console.log(`  ${z.name}: mult=${z.mult}× prob=${(z.prob*100).toFixed(4)}% ev=${(z.prob*z.mult*100).toFixed(4)}%`);
+  });
+});
+</script>
+</body>
+</html>
