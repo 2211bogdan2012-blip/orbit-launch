@@ -124,6 +124,11 @@ canvas{width:100%;height:100%;display:block}
   </div>
   <div class="panel">
     <div class="hist-strip" id="hist"></div>
+    <!-- Heat map: last 20 results per planet, hot/cold indicator (local, display-only) -->
+    <div class="panel-row" style="flex-direction:column;align-items:stretch;gap:3px">
+      <span class="lbl">HEAT MAP · LAST 20</span>
+      <div id="heatMap" style="display:flex;flex-direction:column;gap:2px"></div>
+    </div>
     <!-- Bet + Mode row -->
     <div class="panel-row">
       <div class="bet-wrap"><span class="sym">$</span><input type="number" class="bet-input" id="betIn" value="1" min="0.10" step="0.10"></div>
@@ -231,6 +236,7 @@ const P = [
 ];
 
 const S={balance:10000,bet:1,rockets:[],parts:[],stars:[],comets:[],debris:[],pl:0,launched:0,won:0,hover:null,shake:{x:0,y:0,d:0},eRot:0,screenFlash:0,balAnim:{target:10000,display:10000,vel:0},mx:0,my:0,planetPulse:[0,0,0,0,0],clickFlash:[0,0,0,0,0],totalWagered:0,bestWin:0,
+  planetHist:[[],[],[],[],[]],
   combo:{active:false,selected:new Set(),groups:[]},
   skins:{current:0,unlocked:new Set([0]),bhHit:false,comboWin:false,notify:'',notifyT:0}};
 
@@ -721,6 +727,7 @@ function renderRockets(t){
       if(prog>.8){const pulse=Math.sin(el/50)*0.3;ctx.save();ctx.globalAlpha=.1+pulse*.05;ctx.beginPath();ctx.arc(x,y,6,0,6.28);const rgb=hexRgb(p.c.trail);ctx.fillStyle=`rgba(${rgb.join(',')},0.4)`;ctx.fill();ctx.restore()}
     }else if(!rk.resolved){
       rk.resolved=true;rk.rt=Date.now();rk.rx=x;rk.ry=y;
+      recordHeat(rk.pi,rk.win);
       const isCombo=!!rk.comboGroup;
       if(rk.win){
         addEx(x,y,p.c.light,isCombo?20:40,isCombo?3.5:5.5);addEx(x,y,'#ffffff',isCombo?8:20,isCombo?2.5:4);addRing(x,y,p.c.light);
@@ -862,6 +869,34 @@ function addHist(p,wa,ba,win,nm){const el=document.createElement('div');el.class
   lr.textContent=win?`${p.name} ${p.mult}× +$${wa.toFixed(2)}`:`${p.name} 💥`;
   lr.className='last-result '+(win?'wr':'lr');
 }
+// ── HEAT MAP (local history only, no effect on odds/payouts) ──
+const HEAT_ICONS=['🌙','🔴','🟤','🪐','🕳️'];
+function recordHeat(pi,win){
+  const arr=S.planetHist[pi];arr.unshift({win});if(arr.length>20)arr.length=20;renderHeatMap();
+}
+function renderHeatMap(){
+  const el=document.getElementById('heatMap');if(!el)return;el.innerHTML='';
+  P.forEach((p,pi)=>{
+    const hist=S.planetHist[pi],n=hist.length;
+    const row=document.createElement('div');row.style.cssText='display:flex;align-items:center;gap:4px';
+    const label=document.createElement('span');label.textContent=HEAT_ICONS[pi];label.style.cssText='font-size:10px;width:14px;flex-shrink:0;text-align:center';
+    row.appendChild(label);
+    const cells=document.createElement('div');cells.style.cssText='display:flex;gap:1px;flex:1';
+    const ordered=[...hist].reverse(); // oldest → newest, left to right
+    const pad=20-ordered.length;
+    for(let i=0;i<pad;i++){const c=document.createElement('div');c.style.cssText='width:7px;height:7px;border-radius:1px;flex-shrink:0;background:#1a2236';cells.appendChild(c)}
+    ordered.forEach(h=>{const c=document.createElement('div');c.style.cssText=`width:7px;height:7px;border-radius:1px;flex-shrink:0;background:${h.win?p.c.light:'#ff3b5c33'}`;cells.appendChild(c)});
+    row.appendChild(cells);
+    const wins=hist.filter(h=>h.win).length,expected=p.chance*n;
+    const badge=document.createElement('span');badge.style.cssText='font-family:JetBrains Mono,monospace;font-size:8px;font-weight:700;width:28px;text-align:right;flex-shrink:0';
+    if(n<5){badge.textContent='—';badge.style.color='var(--t3)'}
+    else if(wins>0&&wins>=expected*1.5){badge.textContent='HOT';badge.style.color='var(--gold)'}
+    else if(wins===0&&n>=10){badge.textContent='COLD';badge.style.color='var(--cyan)'}
+    else{badge.textContent='—';badge.style.color='var(--t3)'}
+    row.appendChild(badge);
+    el.appendChild(row);
+  });
+}
 function updateBetLog(){const el=document.getElementById('betLog');el.innerHTML='';betLog.slice(0,30).forEach(b=>{const row=document.createElement('div');row.style.cssText=`display:flex;justify-content:space-between;padding:2px 4px;border-radius:3px;background:${b.win>0?'#00e70108':'#ff3b5c08'}`;row.innerHTML=`<span style="color:var(--t3)">#${b.id}</span><span>${b.planet}</span><span style="color:var(--t3)">$${b.bet.toFixed(2)}</span><span style="color:${b.win>0?'var(--green)':'var(--red)'}">${b.win>0?'+$'+b.win.toFixed(2):'0×'}</span><span style="color:var(--t3)">n:${b.nonce}</span>`;el.appendChild(row)})}
 
 // ── CONTROLS ──
@@ -896,7 +931,7 @@ function toggleRules(){document.getElementById('modalBg').classList.toggle('vis'
 
 // ── INIT ──
 S.balAnim.target=S.balance;S.balAnim.display=S.balance;
-updateUI();render();
+updateUI();renderHeatMap();render();
 console.log('=== ORBIT v1.0 ===');P.forEach(p=>console.log(`${p.name}: ${p.mult}× · ${(p.chance*100).toFixed(3)}% · RTP=${(p.chance*p.mult*100).toFixed(4)}%`));
 </script>
 </body>
