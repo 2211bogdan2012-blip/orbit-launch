@@ -57,6 +57,12 @@ canvas{width:100%;height:100%;display:block}
 .last-result{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;padding:2px 8px;border-radius:4px;background:var(--card);border:1px solid var(--border)}
 .last-result.wr{color:var(--green);border-color:#00e70128}.last-result.lr{color:var(--red);border-color:#ff3b5c28}
 
+/* Streak badge */
+.streak-badge{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:var(--card);border:1px solid var(--border);display:none}
+.streak-badge.hot{display:inline-block;color:var(--gold);border-color:#ffd70033;animation:streakPulse 1.2s ease-in-out infinite}
+.streak-badge.cold{display:inline-block;color:var(--cyan);border-color:#06b6d433}
+@keyframes streakPulse{0%,100%{box-shadow:0 0 0 rgba(255,215,0,0)}50%{box-shadow:0 0 8px rgba(255,215,0,0.25)}}
+
 /* Shared */
 .bet-wrap{display:flex;align-items:center;gap:0;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:0 0 0 8px}
 .bet-wrap .sym{color:var(--t3);font-family:'JetBrains Mono',monospace;font-size:11px}
@@ -136,6 +142,7 @@ canvas{width:100%;height:100%;display:block}
       <button class="bq" onclick="dblBet()">2×</button>
       <button class="bq" id="comboBtn" onclick="toggleComboMode()">COMBO</button>
       <span class="spacer"></span>
+      <span class="streak-badge" id="streakBadge"></span>
       <span class="last-result" id="lastResult">—</span>
     </div>
     <!-- Combo info (shows when combo mode on + 2+ planets selected) -->
@@ -213,6 +220,7 @@ canvas{width:100%;height:100%;display:block}
       <span style="color:var(--t3)">Wagered</span><span id="ssWag" style="color:var(--t2)">$0</span>
       <span style="color:var(--t3)">Net P/L</span><span id="ssPL" style="color:var(--t2)">$0</span>
       <span style="color:var(--t3)">Best Win</span><span id="ssBest" style="color:var(--t2)">—</span>
+      <span style="color:var(--t3)">Best Streak</span><span id="ssStreak" style="color:var(--t2)">—</span>
     </div>
   </div>
 </div>
@@ -860,7 +868,19 @@ function animBalLose(){const el=document.getElementById('balWrap');el.classList.
 function updatePending(){const a=S.rockets.filter(r=>!r.resolved),el=document.getElementById('pending');if(!a.length){el.classList.remove('vis');return}el.classList.add('vis');document.getElementById('pC').textContent=a.length;document.getElementById('pR').textContent=a.reduce((s,r)=>s+r.ba,0).toFixed(2)}
 function showFlash(amt,mult,color,px,py){const el=document.getElementById('wf');el.innerHTML=`+$${amt.toFixed(2)}<span class="mult">${mult}×</span>`;el.style.color=color||'#ffd700';el.style.textShadow=`0 0 40px ${color||'#ffd700'}66`;el.style.left=(px||CX)+'px';el.style.top=((py||CY*0.4)-20)+'px';el.classList.add('vis');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('vis'),2200)}
 function doShake(n){S.shake.x=(Math.random()-.5)*n*2;S.shake.y=(Math.random()-.5)*n*2;S.shake.d=1}
+// ── STREAKS (display-only, no effect on odds/payouts) ──
+const STRK={cur:0,win:false,best:0};
+function recordStreak(win){
+  if(STRK.cur>0&&STRK.win===win)STRK.cur++;else{STRK.cur=1;STRK.win=win}
+  if(win&&STRK.cur>STRK.best)STRK.best=STRK.cur;
+  if(win&&(STRK.cur===3||STRK.cur===5||STRK.cur===10)){M.notify='🔥 '+STRK.cur+' WIN STREAK!';M.notifyT=Date.now()}
+  const el=document.getElementById('streakBadge');
+  if(STRK.cur>=2){el.textContent=(STRK.win?'🔥':'❄️')+' ×'+STRK.cur;el.className='streak-badge '+(STRK.win?'hot':'cold')}
+  else el.className='streak-badge';
+  document.getElementById('ssStreak').textContent=STRK.best>0?STRK.best+' wins':'—';
+}
 function addHist(p,wa,ba,win,nm){const el=document.createElement('div');el.className='hd';
+  recordStreak(win);
   el.title=`${p.name} ${win?p.mult+'× +$'+wa.toFixed(2):'0×'} · $${ba.toFixed(2)} · n:${FAIR.nonce-1}`;
   if(!win&&nm)el.className+=' nm';else if(!win)el.className+=' l';else if(p.mult>=150)el.className+=' e';else if(p.mult>=12)el.className+=' m';else el.className+=' w';
   const h=document.getElementById('hist');h.insertBefore(el,h.firstChild);while(h.children.length>40)h.removeChild(h.lastChild);h.scrollLeft=0;
