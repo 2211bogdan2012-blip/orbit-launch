@@ -88,6 +88,7 @@ canvas{width:100%;height:100%;display:block}
 .combo-info.vis{display:flex;align-items:center;gap:6px}
 .combo-launch{padding:5px 12px;border-radius:6px;border:none;background:linear-gradient(135deg,#d97706,#f59e0b);color:#0a0a0f;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;cursor:pointer}
 .combo-launch:hover{opacity:0.85}.combo-launch:disabled{opacity:0.3;cursor:not-allowed}
+.multi-launch{background:linear-gradient(135deg,#0891b2,#06b6d4)}
 
 /* Desktop sidebar */
 @media(min-width:901px){
@@ -141,6 +142,7 @@ canvas{width:100%;height:100%;display:block}
       <button class="bq" onclick="halfBet()">½</button>
       <button class="bq" onclick="dblBet()">2×</button>
       <button class="bq" id="comboBtn" onclick="toggleComboMode()">COMBO</button>
+      <button class="bq" id="multiBtn" onclick="toggleMultiMode()">MULTI</button>
       <span class="spacer"></span>
       <span class="streak-badge" id="streakBadge"></span>
       <span class="last-result" id="lastResult">—</span>
@@ -152,6 +154,14 @@ canvas{width:100%;height:100%;display:block}
       <span id="comboMult">—</span>
       <button class="combo-launch" id="comboLaunchBtn" onclick="comboLaunch()" disabled>LAUNCH</button>
       <button class="bq" onclick="comboClear()" style="font-size:8px;padding:3px 5px">✕</button>
+    </div>
+    <!-- Multi info (shows when multi mode on + 2+ planets selected) -->
+    <div class="combo-info" id="multiInfo" style="color:var(--cyan)">
+      <span id="multiSel"></span>
+      <span class="spacer"></span>
+      <span id="multiTotal">—</span>
+      <button class="combo-launch multi-launch" id="multiLaunchBtn" onclick="multiLaunch()" disabled>LAUNCH ALL</button>
+      <button class="bq" onclick="multiClear()" style="font-size:8px;padding:3px 5px">✕</button>
     </div>
     <!-- Auto row (collapsible) -->
     <div class="panel-row">
@@ -197,6 +207,8 @@ canvas{width:100%;height:100%;display:block}
     <p>🚀 Standard — Default<br>🥈 Silver — 50 launches<br>🥇 Gold — 200 launches<br>🟣 Void — Hit Black Hole<br>💎 Diamond — 500 launches<br>🔥 Inferno — Win a combo bet<br>Click 🚀 in top bar or press F to cycle.</p>
     <h3>Combo Bets</h3>
     <p>Tap COMBO → click 2-5 planets → LAUNCH COMBO. ALL rockets must land to win. Multipliers multiply. Moon+Mars = 50×. Moon+Mars+Jupiter = 2000×. Huge risk, huge reward.</p>
+    <h3>Multi-Bet</h3>
+    <p>Tap MULTI → click 2-5 planets → LAUNCH ALL. Each rocket is an independent bet at the planet's normal multiplier. Total stake = bet × planets selected.</p>
     <h3>Auto-Bet</h3>
     <p>Tap AUTO — select planets + speed — set stop conditions (profit/loss/max bets) — START.</p>
     <h3>Math</h3>
@@ -246,6 +258,7 @@ const P = [
 const S={balance:10000,bet:1,rockets:[],parts:[],stars:[],comets:[],debris:[],pl:0,launched:0,won:0,hover:null,shake:{x:0,y:0,d:0},eRot:0,screenFlash:0,balAnim:{target:10000,display:10000,vel:0},mx:0,my:0,planetPulse:[0,0,0,0,0],clickFlash:[0,0,0,0,0],totalWagered:0,bestWin:0,
   planetHist:[[],[],[],[],[]],
   combo:{active:false,selected:new Set(),groups:[]},
+  multi:{active:false,selected:new Set()},
   skins:{current:0,unlocked:new Set([0]),bhHit:false,comboWin:false,notify:'',notifyT:0}};
 
 const SKINS=[
@@ -499,6 +512,7 @@ function stopAuto(){A.running=false;clearInterval(A.timer);const b=document.getE
 // ── COMBO MODE ──
 function toggleComboMode(){
   S.combo.active=!S.combo.active;
+  if(S.combo.active&&S.multi.active)toggleMultiMode();
   if(!S.combo.active)S.combo.selected.clear();
   document.getElementById('comboBtn').classList.toggle('on',S.combo.active);
   updateComboUI();
@@ -557,6 +571,49 @@ async function comboLaunch(){
   if(betLog.length>50)betLog.pop();updateBetLog();
   sndLaunch();checkSkinUnlocks();updateUI();updatePending();
 }
+// ── MULTI-BET MODE (independent bets on several planets) ──
+function toggleMultiMode(){
+  S.multi.active=!S.multi.active;
+  if(S.multi.active&&S.combo.active)toggleComboMode();
+  if(!S.multi.active)S.multi.selected.clear();
+  document.getElementById('multiBtn').classList.toggle('on',S.multi.active);
+  updateMultiUI();
+}
+function multiSelectPlanet(pi){
+  if(S.multi.selected.has(pi))S.multi.selected.delete(pi);
+  else if(S.multi.selected.size<5)S.multi.selected.add(pi);
+  updateMultiUI();
+}
+function multiClear(){S.multi.selected.clear();updateMultiUI()}
+function updateMultiUI(){
+  const sel=[...S.multi.selected].sort((a,b)=>a-b);
+  const infoEl=document.getElementById('multiInfo');
+  const btn=document.getElementById('multiLaunchBtn');
+  if(!S.multi.active||sel.length<2){
+    infoEl.classList.remove('vis');
+    btn.disabled=true;return;
+  }
+  infoEl.classList.add('vis');
+  document.getElementById('multiSel').textContent=sel.map(i=>P[i].name).join(' · ');
+  document.getElementById('multiTotal').textContent='$'+(S.bet*sel.length).toFixed(2)+' total';
+  btn.disabled=S.bet*sel.length>S.balance;
+}
+async function multiLaunch(){
+  const sel=[...S.multi.selected].sort((a,b)=>a-b);
+  if(sel.length<2||S.bet<=0||S.bet*sel.length>S.balance)return;
+  for(const pi of sel)await launch(pi);
+  updateMultiUI();
+}
+function drawMultiHighlights(t){
+  if(!S.multi.active||!S.multi.selected.size)return;
+  ctx.save();ctx.globalAlpha=.5+Math.sin(t*3)*.15;
+  S.multi.selected.forEach(pi=>{
+    const pos=gpp(P[pi]);
+    ctx.beginPath();ctx.arc(pos.x,pos.y,pos.r+4,0,6.28);
+    ctx.strokeStyle='#06b6d466';ctx.lineWidth=2;ctx.stroke();
+  });
+  ctx.restore();
+}
 function drawComboConnections(t){
   if(!S.combo.active||S.combo.selected.size<2)return;
   const sel=[...S.combo.selected].sort((a,b)=>a-b);
@@ -583,7 +640,7 @@ function render(){
   // Shake
   const sx=S.shake.x*S.shake.d,sy=S.shake.y*S.shake.d;S.shake.d*=.87;if(S.shake.d<.01)S.shake.d=0;
   ctx.save();ctx.translate(sx,sy);
-  drawBg(t);drawStars(t);drawComets(t);drawOrbits(t);drawEarth(t);drawComboConnections(t);drawPlanets(t);renderRockets(t);renderParts();renderDebris();
+  drawBg(t);drawStars(t);drawComets(t);drawOrbits(t);drawEarth(t);drawComboConnections(t);drawMultiHighlights(t);drawPlanets(t);renderRockets(t);renderParts();renderDebris();
   // Screen flash (white flash on big events)
   if(S.screenFlash>0){ctx.save();ctx.globalAlpha=S.screenFlash;ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);ctx.restore();S.screenFlash*=.75;if(S.screenFlash<.01)S.screenFlash=0}
   // ── HUD: Mission + XP + Bonus + Notifications ──
@@ -684,8 +741,9 @@ function drawPlanets(t){
       ctx.fillText(`$${pw2.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`,lbX,mtY+(alignV==='bottom'?-14:16))}
   });
   // Empty state hint
-  if(S.launched===0&&!S.combo.active){ctx.save();ctx.globalAlpha=.3+Math.sin(t*2)*.1;ctx.font='500 13px Outfit';ctx.fillStyle='#475569';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('Click a planet to launch',CX,CY+ER+40);ctx.restore()}
+  if(S.launched===0&&!S.combo.active&&!S.multi.active){ctx.save();ctx.globalAlpha=.3+Math.sin(t*2)*.1;ctx.font='500 13px Outfit';ctx.fillStyle='#475569';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('Click a planet to launch',CX,CY+ER+40);ctx.restore()}
   if(S.combo.active){ctx.save();ctx.globalAlpha=.4+Math.sin(t*3)*.1;ctx.font='600 12px JetBrains Mono';ctx.fillStyle='#ffd700';ctx.textAlign='center';ctx.textBaseline='middle';const ct=S.combo.selected.size<2?'Select '+Math.max(0,2-S.combo.selected.size)+' more planets':'Ready — click LAUNCH';ctx.fillText('COMBO: '+ct,CX,CY+ER+40);ctx.restore()}
+  if(S.multi.active){ctx.save();ctx.globalAlpha=.4+Math.sin(t*3)*.1;ctx.font='600 12px JetBrains Mono';ctx.fillStyle='#06b6d4';ctx.textAlign='center';ctx.textBaseline='middle';const mt2=S.multi.selected.size<2?'Select '+Math.max(0,2-S.multi.selected.size)+' more planets — each bets independently':'Ready — click LAUNCH ALL';ctx.fillText('MULTI: '+mt2,CX,CY+ER+40);ctx.restore()}
 }
 
 function renderRockets(t){
@@ -836,9 +894,9 @@ const wrap=document.getElementById('wrap');let lpt=null,lpf=false;
 wrap.addEventListener('mousemove',e=>{const r=canvas.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;S.mx=mx;S.my=my;const h=hitTest(mx,my);if(h!==S.hover&&h>=0)sndHover(h);S.hover=h>=0?h:null;canvas.style.cursor=h>=0?'pointer':'default'});
 wrap.addEventListener('mouseleave',()=>{S.hover=null});
 wrap.addEventListener('mousedown',e=>{const r=canvas.getBoundingClientRect(),h=hitTest(e.clientX-r.left,e.clientY-r.top);if(h<0)return;lpf=false;lpt=setTimeout(()=>{lpf=true;quickAuto(h)},600)});
-wrap.addEventListener('mouseup',e=>{clearTimeout(lpt);if(lpf)return;const r=canvas.getBoundingClientRect(),h=hitTest(e.clientX-r.left,e.clientY-r.top);if(h>=0){if(S.combo.active)comboSelectPlanet(h);else launch(h)}});
+wrap.addEventListener('mouseup',e=>{clearTimeout(lpt);if(lpf)return;const r=canvas.getBoundingClientRect(),h=hitTest(e.clientX-r.left,e.clientY-r.top);if(h>=0){if(S.combo.active)comboSelectPlanet(h);else if(S.multi.active)multiSelectPlanet(h);else launch(h)}});
 wrap.addEventListener('touchstart',e=>{e.preventDefault();const tc=e.touches[0],r=canvas.getBoundingClientRect(),h=hitTest(tc.clientX-r.left,tc.clientY-r.top);if(h<0)return;S.hover=h;lpf=false;lpt=setTimeout(()=>{lpf=true;if(navigator.vibrate)navigator.vibrate(30);quickAuto(h)},600)},{passive:false});
-wrap.addEventListener('touchend',e=>{clearTimeout(lpt);S.hover=null;if(lpf)return;const tc=e.changedTouches[0],r=canvas.getBoundingClientRect(),h=hitTest(tc.clientX-r.left,tc.clientY-r.top);if(h>=0){if(navigator.vibrate)navigator.vibrate(10);if(S.combo.active)comboSelectPlanet(h);else launch(h)}});
+wrap.addEventListener('touchend',e=>{clearTimeout(lpt);S.hover=null;if(lpf)return;const tc=e.changedTouches[0],r=canvas.getBoundingClientRect(),h=hitTest(tc.clientX-r.left,tc.clientY-r.top);if(h>=0){if(navigator.vibrate)navigator.vibrate(10);if(S.combo.active)comboSelectPlanet(h);else if(S.multi.active)multiSelectPlanet(h);else launch(h)}});
 wrap.addEventListener('touchcancel',()=>{clearTimeout(lpt);S.hover=null});
 function quickAuto(pi){A.planets.clear();document.querySelectorAll('.pc').forEach(c=>c.classList.remove('sel'));A.planets.add(pi);document.querySelector(`.pc[data-pi="${pi}"]`).classList.add('sel');if(!A.running)startAuto()}
 
@@ -923,6 +981,7 @@ function updateBetLog(){const el=document.getElementById('betLog');el.innerHTML=
 function checkBetWarning(){
   const inp=document.getElementById('betIn');
   if(S.bet>S.balance*.1&&S.balance>0){inp.style.borderColor='#f59e0b';inp.style.color='#f59e0b';setTimeout(()=>{inp.style.borderColor='';inp.style.color=''},800)}
+  updateMultiUI();
 }
 function setBet(v){S.bet=Math.max(.1,v);document.getElementById('betIn').value=S.bet;checkBetWarning()}
 function halfBet(){S.bet=Math.max(.1,Math.round(S.bet*50)/100);document.getElementById('betIn').value=S.bet;checkBetWarning()}
